@@ -18,6 +18,8 @@ from src.simulation import (DEFAULT_SEED, expected_inventory_drift,
                             simulate_trades, summarize_run,
                             validate_against_theory)
 
+# Revisado hasta aqui (Arturo) - resto pendiente de revision
+
 FIGURES_DIR = Path(__file__).resolve().parent / "docs" / "figures"
 
 N_TRADES = 10_000
