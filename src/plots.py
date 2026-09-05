@@ -1,9 +1,9 @@
 """
-Generacion de las figuras del laboratorio.
+Genera las figuras del laboratorio.
 
-Cada funcion recibe datos ya calculados (nunca los calcula) y devuelve la
-figura de matplotlib, guardandola en disco si se indica una ruta.
-Todas las figuras llevan titulo, ejes etiquetados y leyenda.
+Estas funciones NUNCA calculan nada nuevo: reciben datos que ya vienen de
+model.py / simulation.py y solo se encargan de dibujarlos. Todas las
+figuras llevan titulo, ejes etiquetados y leyenda, como pide el enunciado.
 """
 
 from __future__ import annotations
@@ -11,13 +11,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("Agg")  # backend sin ventana: permite ejecutar en cualquier maquina
+matplotlib.use("Agg")  # backend sin ventana, para poder correr esto en cualquier maquina
 import matplotlib.pyplot as plt
 import numpy as np
 
 from src.model import ModelParams, execution_probability
 
-# Paleta unica para los tres regimenes, usada de forma consistente en todo el proyecto.
+# Un color fijo por regimen, para que se vea igual en todas las graficas del proyecto.
 REGIME_COLORS = {
     "Optimo": "#1b6ca8",
     "Estrecho": "#c1440e",
@@ -35,6 +35,7 @@ plt.rcParams.update({
 
 
 def _save(fig: plt.Figure, path: str | Path | None) -> plt.Figure:
+    """Guarda la figura en disco si se dio una ruta; si no, solo la regresa."""
     if path is not None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,11 +45,7 @@ def _save(fig: plt.Figure, path: str | Path | None) -> plt.Figure:
 
 def plot_execution_probability(params: ModelParams,
                                path: str | Path | None = None) -> plt.Figure:
-    """Figura 1: probabilidad de ejecucion contra el semi-spread.
-
-    Marca explicitamente el punto donde la probabilidad llega a cero,
-    s = alpha / beta = 6.25.
-    """
+    """Figura 1: probabilidad de ejecucion vs. semi-spread, marcando donde llega a cero."""
     s_zero = params.zero_demand_spread
     s = np.linspace(0.0, s_zero * 1.4, 500)
     p = execution_probability(s, params)
@@ -75,15 +72,15 @@ def plot_execution_probability(params: ModelParams,
 
 def plot_cumulative_pnl(runs: dict[str, "object"],
                         path: str | Path | None = None) -> plt.Figure:
-    """Figura 2: P&L acumulado a lo largo de los trades, tres regimenes."""
+    """Figura 2: P&L acumulado de los tres regimenes, en los mismos ejes."""
     fig, ax = plt.subplots(figsize=(8.5, 5.0))
     for name, df in runs.items():
         ax.plot(df["trade_id"], df["cum_pnl"], lw=1.6,
                 color=REGIME_COLORS.get(name), label=name)
     ax.axhline(0.0, color="black", lw=1.0, alpha=0.6)
 
-    n = len(next(iter(runs.values())))
-    ax.set_title(f"P&L acumulado del formador de mercado ({n:,} trades)".replace(",", " "))
+    n_trades = len(next(iter(runs.values())))
+    ax.set_title(f"P&L acumulado del formador de mercado ({n_trades:,} trades)".replace(",", " "))
     ax.set_xlabel("Numero de trade")
     ax.set_ylabel("P&L acumulado (unidades monetarias)")
     ax.legend(title="Regimen de cotizacion", loc="upper left")
@@ -92,26 +89,26 @@ def plot_cumulative_pnl(runs: dict[str, "object"],
 
 def plot_inventory(runs: dict[str, "object"],
                    path: str | Path | None = None) -> plt.Figure:
-    """Figura 3: inventario acumulado a lo largo de los trades, tres regimenes."""
+    """Figura 3: inventario acumulado de los tres regimenes, en los mismos ejes."""
     fig, ax = plt.subplots(figsize=(8.5, 5.0))
     for name, df in runs.items():
         ax.plot(df["trade_id"], df["inventory"], lw=1.4,
                 color=REGIME_COLORS.get(name), label=name, alpha=0.9)
     ax.axhline(0.0, color="black", lw=1.0, alpha=0.6)
 
-    n = len(next(iter(runs.values())))
-    ax.set_title(f"Inventario acumulado del formador de mercado ({n:,} trades)".replace(",", " "))
+    n_trades = len(next(iter(runs.values())))
+    ax.set_title(f"Inventario acumulado del formador de mercado ({n_trades:,} trades)".replace(",", " "))
     ax.set_xlabel("Numero de trade")
     ax.set_ylabel("Inventario neto (unidades del activo)")
-    # Las trayectorias de inventario derivan hacia abajo: la esquina superior
-    # derecha es la unica que queda libre en los tres regimenes.
+    # El inventario tiende a irse hacia abajo en los tres regimenes, asi que
+    # la esquina superior derecha suele quedar libre para la leyenda.
     ax.legend(title="Regimen de cotizacion", loc="upper right")
     return _save(fig, path)
 
 
 def plot_mc_histogram(mc_results: dict[str, np.ndarray],
                       path: str | Path | None = None) -> plt.Figure:
-    """Figura 4: histograma del P&L final del analisis de Monte Carlo."""
+    """Figura 4: histograma del P&L final de las corridas de Monte Carlo, tres regimenes."""
     fig, ax = plt.subplots(figsize=(8.5, 5.0))
     all_values = np.concatenate(list(mc_results.values()))
     bins = np.linspace(all_values.min(), all_values.max(), 60)
@@ -134,13 +131,7 @@ def plot_mc_histogram(mc_results: dict[str, np.ndarray],
 def plot_spread_sensitivity(sensitivity_rows: list[dict],
                             params: ModelParams,
                             path: str | Path | None = None) -> plt.Figure:
-    """Figura 5: spread optimo contra pi_I, con la referencia teorica pi_I = 0.
-
-    La referencia horizontal es el spread del monopolista sin seleccion adversa,
-    s* = alpha / beta = 6.25 (spread total), resultado analitico visto en la
-    Sesion 04. Cualquier punto por encima de esa linea es el costo de la
-    seleccion adversa traducido a spread.
-    """
+    """Figura 5 (extra): spread optimo vs. pi_I, contra la referencia teorica de pi_I=0."""
     pis = [row["pi_informed"] for row in sensitivity_rows]
     spreads = [row["spread"] for row in sensitivity_rows]
 
