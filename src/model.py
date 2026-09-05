@@ -1,9 +1,9 @@
 """
 Modelo de Copeland y Galai (1983): cotizaciones optimas de un formador de mercado.
 
-Contiene la funcion de utilidad esperada por trader que llega, sus componentes
-(ganancia frente a liquidez, perdida esperada frente a informados) y la rutina
-de optimizacion de las cotizaciones Bid y Ask.
+Aqui vive la funcion de utilidad esperada por trader que llega, sus dos
+componentes (ganancia frente a liquidez, perdida frente a informados) y la
+optimizacion de las cotizaciones Bid y Ask.
 
 Formulacion implementada
 ------------------------
@@ -12,20 +12,20 @@ Formulacion implementada
 
 con f(P) la densidad Erlang(K=60, lambda=3) del valor verdadero del activo.
 
-Supuestos declarados
---------------------
-1. El formador de mercado cotiza una unidad por lado y cada trader que llega
-   demanda a lo mas una unidad.
-2. pi_L = 1 - pi_I: solo existen dos tipos de trader (liquidez e informado).
-3. La demanda no informada es identica en ambos lados:
-   pi_LB(s) = pi_LS(s) = max(0, alpha - beta * s), con alpha = 0.50, beta = 0.08.
-   El truncamiento en cero es obligatorio: sin el, la "probabilidad" seria
-   negativa para s > 6.25 y la funcion objetivo dejaria de tener sentido.
-4. El trader informado observa P sin ruido y solo opera cuando le conviene:
-   compra al Ask si P > A y vende al Bid si P < B. De ahi los limites de las
+Supuestos del modelo
+---------------------
+1. El MM cotiza una unidad por lado; cada trader que llega pide a lo mas una.
+2. Solo hay dos tipos de trader: informado y de liquidez (pi_L = 1 - pi_I).
+3. La demanda no informada es igual en ambos lados:
+   pi_LB(s) = pi_LS(s) = max(0, alpha - beta * s), alpha = 0.50, beta = 0.08.
+   El truncamiento en cero es necesario: sin el, para s > 6.25 la
+   "probabilidad" saldria negativa y la funcion objetivo dejaria de tener
+   sentido.
+4. El informado ve P sin ruido y solo opera cuando le conviene: compra al
+   Ask si P > A, vende al Bid si P < B. De ahi salen los limites de las
    integrales de perdida.
-5. El formador de mercado es neutral al riesgo y no gestiona inventario: el
-   modelo no penaliza posiciones acumuladas (ver limitaciones en el README).
+5. El MM es neutral al riesgo y no gestiona inventario -- el modelo no
+   penaliza posiciones acumuladas (limitacion que se discute en el README).
 """
 
 from __future__ import annotations
@@ -35,35 +35,34 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import integrate, optimize, stats
 
-# Tolerancia usada para truncar las colas de la Erlang al integrar.
-# La masa de probabilidad despreciada por lado es menor a TAIL_TOL, es decir
-# el error de truncamiento del valor esperado es despreciable frente a la
-# precision de dos decimales que exige el reporte.
+# Tolerancia para truncar las colas de la Erlang al integrar. La masa de
+# probabilidad que se pierde por lado es menor a esto, muy por debajo de
+# los dos decimales que exige el reporte.
 TAIL_TOL = 1e-13
 
 
 @dataclass(frozen=True)
 class ModelParams:
-    """Parametros del caso base del laboratorio (Seccion 3.1 del enunciado)."""
+    """Parametros del caso base (Seccion 3.1 del enunciado)."""
 
     s0: float = 19.90          # Precio de referencia
-    k: int = 60                # Parametro de forma de la Erlang
-    lam: float = 3.0           # Parametro de tasa de la Erlang
-    pi_informed: float = 0.40  # Probabilidad de que el trader este informado
+    k: int = 60                # Forma de la Erlang
+    lam: float = 3.0           # Tasa de la Erlang
+    pi_informed: float = 0.40  # Probabilidad de trader informado
     alpha: float = 0.50        # Intercepto de la demanda no informada
     beta: float = 0.08         # Sensibilidad de la demanda al spread por lado
 
     @property
     def pi_liquidity(self) -> float:
-        """Probabilidad de que el trader sea de liquidez: pi_L = 1 - pi_I."""
+        """pi_L = 1 - pi_I."""
         return 1.0 - self.pi_informed
 
     @property
     def value_dist(self) -> stats.rv_continuous:
         """Distribucion del valor verdadero P ~ Erlang(K, lambda).
 
-        `scipy.stats.erlang` se parametriza con forma `a = K` y `scale = 1/lambda`,
-        de modo que E[P] = K / lambda = 20.0 y sd(P) = sqrt(K) / lambda = 2.582.
+        scipy.stats.erlang se parametriza con forma a=K y scale=1/lambda,
+        asi que E[P] = K/lambda = 20.0 y sd(P) = sqrt(K)/lambda = 2.582.
         """
         return stats.erlang(self.k, scale=1.0 / self.lam)
 
@@ -91,34 +90,18 @@ class QuoteSolution:
 
 def execution_probability(spread_side: np.ndarray | float,
                           params: ModelParams) -> np.ndarray | float:
-    """Probabilidad de ejecucion de un trader de liquidez.
-
-    pi_LB(s) = pi_LS(s) = max(0, alpha - beta * s)
-
-    Parameters
-    ----------
-    spread_side : distancia entre la cotizacion y S0 (semi-spread), s >= 0.
-    params : parametros del modelo.
-
-    Returns
-    -------
-    Probabilidad en [0, alpha]. Nunca negativa.
-    """
+    """Probabilidad de ejecucion de un trader de liquidez: pi_LB(s) = pi_LS(s) = max(0, alpha - beta*s)."""
     s = np.asarray(spread_side, dtype=float)
     prob = np.maximum(params.alpha - params.beta * s, 0.0)
     return float(prob) if prob.ndim == 0 else prob
 
 
 def expected_informed_loss_ask(ask: float, params: ModelParams) -> float:
-    """Perdida esperada frente a informados del lado de la venta.
+    """Perdida esperada frente a informados, lado venta: integral de (P-A)*f(P) de A a infinito.
 
-    Calcula int_A^inf (P - A) f(P) dP mediante `scipy.integrate.quad`.
-    El limite superior infinito se sustituye por el cuantil 1 - TAIL_TOL de la
-    Erlang (45.2198). La contribucion descartada vale 2.24e-12 en el optimo,
-    diez ordenes de magnitud por debajo de los dos decimales que exige el
-    reporte. Es una medida defensiva con error acotado y no la correccion de
-    una falla observada: en el rango de cotizaciones relevante `quad` con
-    limite np.inf devuelve el mismo valor (diferencia relativa < 1.7e-11).
+    Se integra con quad hasta un cuantil muy cercano a 1 en vez de hasta
+    infinito literal, porque quad no acepta infinito directamente y la cola
+    que se recorta pesa menos que TAIL_TOL.
     """
     dist = params.value_dist
     upper = float(dist.ppf(1.0 - TAIL_TOL))
@@ -130,14 +113,10 @@ def expected_informed_loss_ask(ask: float, params: ModelParams) -> float:
 
 
 def expected_informed_loss_bid(bid: float, params: ModelParams) -> float:
-    """Perdida esperada frente a informados del lado de la compra.
+    """Perdida esperada frente a informados, lado compra: integral de (B-P)*f(P) de 0 a B.
 
-    Calcula int_0^B (B - P) f(P) dP mediante `scipy.integrate.quad`.
-    El limite inferior 0 se sustituye por el cuantil TAIL_TOL de la Erlang
-    (6.4351), donde la densidad es numericamente nula. La contribucion
-    descartada vale 1.02e-12 en el optimo. Igual que del lado Ask, es una
-    medida defensiva con error acotado: integrando desde 0, `quad` devuelve
-    el mismo valor (diferencia relativa < 1.4e-11).
+    Igual que del lado Ask: se integra desde un cuantil muy cercano a 0 en
+    vez de desde 0 literal, porque ahi la densidad ya es numericamente nula.
     """
     dist = params.value_dist
     lower = float(dist.ppf(TAIL_TOL))
@@ -149,7 +128,7 @@ def expected_informed_loss_bid(bid: float, params: ModelParams) -> float:
 
 
 def expected_informed_loss(ask: float, bid: float, params: ModelParams) -> float:
-    """Perdida esperada total frente a traders informados (sin ponderar por pi_I)."""
+    """Perdida esperada total frente a informados (sin ponderar por pi_I)."""
     return (expected_informed_loss_ask(ask, params)
             + expected_informed_loss_bid(bid, params))
 
@@ -176,13 +155,12 @@ def negative_expected_utility(x: np.ndarray, params: ModelParams) -> float:
 
 def optimize_quotes(params: ModelParams | None = None,
                     ask_upper: float | None = None) -> QuoteSolution:
-    """Maximiza Pi(A, B) minimizando -Pi(A, B) con `scipy.optimize.minimize`.
+    """Encuentra el Bid y Ask que maximizan Pi(A, B), minimizando -Pi(A, B).
 
-    Restricciones: B en (0, S0] y A en [S0, inf). El limite superior infinito
-    del Ask se sustituye por `ask_upper` (por defecto S0 mas dos veces el
-    semi-spread que anula la demanda). Es un limite no vinculante: mas alla de
-    S0 + alpha/beta la ganancia de liquidez es exactamente cero y la utilidad
-    solo puede decrecer, por lo que ningun optimo puede vivir en esa region.
+    Restricciones: B en (0, S0] y A en [S0, inf). El "infinito" del Ask se
+    reemplaza por `ask_upper` (S0 mas dos veces el semi-spread que anula la
+    demanda). No cambia el resultado: mas alla de ese punto la ganancia de
+    liquidez ya es cero, asi que el optimo nunca puede caer ahi.
     """
     params = params or ModelParams()
     if ask_upper is None:
@@ -212,11 +190,12 @@ def optimize_quotes(params: ModelParams | None = None,
 
 def optimize_quotes_grid(params: ModelParams | None = None,
                          n_points: int = 4001) -> QuoteSolution:
-    """Optimo por barrido fino, usado solo para verificar `optimize_quotes`.
+    """Optimo por barrido fino, usado solo para verificar optimize_quotes.
 
-    La utilidad es separable en A y B, asi que basta un barrido unidimensional
-    por lado. No sustituye a `scipy.optimize.minimize`: sirve como prueba
-    independiente de que el optimizador no quedo atrapado en una region plana.
+    La utilidad se puede separar en una parte que solo depende de A y otra
+    que solo depende de B, asi que basta barrer cada lado por separado. No
+    reemplaza a optimize_quotes: es una segunda forma de llegar al mismo
+    numero, para confirmar que el optimizador no se quedo atorado.
     """
     params = params or ModelParams()
     grid = np.linspace(0.0, params.zero_demand_spread, n_points)
@@ -240,11 +219,10 @@ def optimize_quotes_grid(params: ModelParams | None = None,
 
 
 def sensitivity_to_pi_informed(pi_values, params: ModelParams | None = None):
-    """Reoptimiza las cotizaciones para cada valor de pi_I.
+    """Reoptimiza las cotizaciones para cada valor de pi_I en pi_values.
 
-    Returns
-    -------
-    list[dict] con pi_informed, bid, ask, spread y expected_utility.
+    Regresa una lista de diccionarios con pi_informed, bid, ask, spread y
+    expected_utility -- una fila por cada valor probado.
     """
     base = params or ModelParams()
     rows = []
