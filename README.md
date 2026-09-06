@@ -1,6 +1,6 @@
 # Lab01_Abdon_Arturo
 
-Este proyecto implementa el modelo de formador de mercado de Copeland y Galai (1983): un market maker cotiza Bid y Ask frente a traders informados y de liquidez, maximiza la utilidad esperada por llegada y evalúa el resultado con simulaciones. El valor verdadero del activo sigue una Erlang; la demanda no informada cae linealmente con el semi-spread; el informado solo opera cuando le conviene. El código obtiene las cotizaciones óptimas, las compara con regímenes estrecho y amplio, valida el simulador contra la fórmula teórica, corre Monte Carlo (P&L, riesgo de pérdida e inventario) y genera las figuras del laboratorio.
+Este proyecto implementa el modelo de market maker de Copeland y Galai: cotiza Bid y Ask frente a traders informados y de liquidez (no informados), maximiza la utilidad esperada por llegada y evalúa el resultado con simulaciones. El informado solo opera cuando le conviene. El código obtiene las cotizaciones óptimas, las compara con regímenes estrecho y amplio, valida el simulador contra la fórmula teórica, corre Monte Carlo (P&L, riesgo de pérdida e inventario) y genera las figuras del laboratorio.
 
 ## Instalación
 
@@ -10,13 +10,13 @@ Desde la raíz del repositorio:
 python -m venv .venv
 ```
 
-Windows (PowerShell):
+PowerShell:
 
 ```bash
 .\.venv\Scripts\Activate.ps1
 ```
 
-macOS / Linux:
+Mac / Linux:
 
 ```bash
 source .venv/bin/activate
