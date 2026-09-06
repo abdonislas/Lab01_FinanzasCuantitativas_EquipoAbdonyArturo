@@ -40,9 +40,6 @@ def main() -> None:
     np.random.seed(DEFAULT_SEED)  # semilla global documentada en el README
     params = ModelParams()
 
-    # Revisado por Arturo hasta aqui: imports, src/simulation.py, constantes,
-    # _rule() y el arranque de main() - resto de main() pendiente de revision
-
     # ------------------------------------------------------------------ 1 y 2
     _rule("1. PARAMETROS DEL CASO BASE")
     dist = params.value_dist
