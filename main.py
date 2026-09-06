@@ -18,8 +18,6 @@ from src.simulation import (DEFAULT_SEED, expected_inventory_drift,
                             simulate_trades, summarize_run,
                             validate_against_theory)
 
-# Revisado por Arturo: imports de main.py y src/simulation.py - resto pendiente de revision
-
 FIGURES_DIR = Path(__file__).resolve().parent / "docs" / "figures"
 
 N_TRADES = 10_000
@@ -41,6 +39,9 @@ def main() -> None:
 
     np.random.seed(DEFAULT_SEED)  # semilla global documentada en el README
     params = ModelParams()
+
+    # Revisado por Arturo hasta aqui: imports, src/simulation.py, constantes,
+    # _rule() y el arranque de main() - resto de main() pendiente de revision
 
     # ------------------------------------------------------------------ 1 y 2
     _rule("1. PARAMETROS DEL CASO BASE")
