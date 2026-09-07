@@ -27,9 +27,7 @@ PI_GRID = (0.1, 0.4, 0.7)
 
 
 def _rule(title: str) -> None:
-    print("\n" + "=" * 78)
-    print(title)
-    print("=" * 78)
+    print("\n" + title)
 
 
 def main() -> None:
